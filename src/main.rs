@@ -59,36 +59,55 @@ async fn get_chapters(
     let mut chapters: IndexMap<usize, String> = IndexMap::new();
 
     for (idx, link) in &chapter_map {
-        let delay = rand::random_range(2000..5000);
-        sleep(Duration::from_millis(delay)).await;
+        loop {
+            let delay = rand::random_range(3500..7500);
+            sleep(Duration::from_millis(delay)).await;
 
-        println!("Extracting chapter {}", idx);
+            println!("Extracting chapter {}", idx);
 
-        let page = scraper.create_page().await?;
-        let page = scraper.get_content(page, link).await?;
+            let result: Result<String> = async {
+                let page = scraper.create_page().await?;
+                let page = scraper.get_content(page, link).await?;
 
-        let title = page
-            .find_element(".txtnav h1")
-            .await?
-            .inner_text()
-            .await?
-            .unwrap_or_default();
+                let title = page
+                    .find_element(".txtnav h1")
+                    .await?
+                    .inner_text()
+                    .await?
+                    .unwrap_or_default();
 
-        let content = page
-            .find_element(".txtnav")
-            .await?
-            .inner_text()
-            .await?
-            .unwrap_or_default();
+                let content = page
+                    .find_element(".txtnav")
+                    .await?
+                    .inner_text()
+                    .await?
+                    .unwrap_or_default();
 
-        let combined = format!("{}\n\n{}", title, content);
+                let combined = format!("{}\n\n{}", title, content);
 
-        chapters.insert(*idx, combined);
+                page.close().await.ok();
 
-        page.close().await.ok();
+                Ok(combined)
+            }
+            .await;
+
+            match result {
+                std::result::Result::Ok(chapter) => {
+                    chapters.insert(*idx, chapter);
+                    break;
+                }
+                Err(err) => {
+                    eprintln!(
+                        "Failed extracting chapter {}: {}. Retrying in 60 seconds...",
+                        idx, err
+                    );
+                    sleep(Duration::from_secs(60)).await;
+                }
+            }
+        }
     }
 
-    return Ok(chapters);
+    Ok(chapters)
 }
 
 fn remove_path(path_str: &str) -> Result<()> {

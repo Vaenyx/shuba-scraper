@@ -25,6 +25,7 @@ impl Scraper {
                 "--disable-infobars",
                 "--window-size=1920,1080",
             ])
+            .with_head()
             .user_data_dir("./chrome-profile")
             .build()
             .map_err(|e| anyhow!(e))?;
