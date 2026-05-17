@@ -1437,6 +1437,7 @@ dependencies = [
  "chromiumoxide",
  "clap",
  "futures",
+ "indexmap",
  "rand 0.10.1",
  "regex",
  "serde_json",

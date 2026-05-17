@@ -1,9 +1,11 @@
 use crate::scraper::Scraper;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Ok, Result};
 use chromiumoxide::Page;
 use clap::Parser;
+use indexmap::IndexMap;
 use regex::Regex;
-use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use tokio::time::{sleep, Duration};
 
 mod scraper;
@@ -16,6 +18,15 @@ struct Args {
 
     #[arg(short, long)]
     out: String,
+
+    #[arg(short, long)]
+    start: Option<i32>,
+
+    #[arg(short, long)]
+    end: Option<i32>,
+
+    #[arg(long)]
+    dir: bool,
 }
 
 fn get_book_id(url: &str) -> Result<String> {
@@ -43,15 +54,17 @@ async fn get_chapter_links(
 
 async fn get_chapters(
     scraper: &mut Scraper,
-    links: Vec<String>,
-) -> Result<HashMap<String, String>> {
-    let chapters = HashMap::new();
-    for link in links.iter() {
+    chapter_map: IndexMap<usize, String>,
+) -> Result<IndexMap<usize, String>> {
+    let mut chapters: IndexMap<usize, String> = IndexMap::new();
+
+    for (idx, link) in &chapter_map {
         let delay = rand::random_range(2000..5000);
         sleep(Duration::from_millis(delay)).await;
 
-        let page = scraper.create_page().await?;
+        println!("Extracting chapter {}", idx);
 
+        let page = scraper.create_page().await?;
         let page = scraper.get_content(page, link).await?;
 
         let title = page
@@ -61,7 +74,16 @@ async fn get_chapters(
             .await?
             .unwrap_or_default();
 
-        println!("{}", title);
+        let content = page
+            .find_element(".txtnav")
+            .await?
+            .inner_text()
+            .await?
+            .unwrap_or_default();
+
+        let combined = format!("{}\n\n{}", title, content);
+
+        chapters.insert(*idx, combined);
 
         page.close().await.ok();
     }
@@ -69,22 +91,71 @@ async fn get_chapters(
     return Ok(chapters);
 }
 
+fn remove_path(path_str: &str) -> Result<()> {
+    let path = Path::new(path_str);
+
+    let metadata = fs::symlink_metadata(path)?;
+
+    if metadata.is_dir() {
+        fs::remove_dir_all(path)?;
+    } else {
+        fs::remove_file(path)?;
+    }
+
+    return Ok(());
+}
+
+fn save_singlefile(chapters: IndexMap<usize, String>, out: &str) -> Result<()> {
+    let text = chapters
+        .values()
+        .map(|v| v.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n\n");
+
+    std::fs::write(out, text)?;
+    return Ok(());
+}
+
+fn save_dir(chapters: IndexMap<usize, String>, out: &str) -> Result<()> {
+    std::fs::create_dir_all(out)?;
+    for (idx, text) in chapters {
+        std::fs::write(format!("{}/{}", out, idx), text)?;
+    }
+    return Ok(());
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    let start = args.start.unwrap_or(1);
+    let end = args.end.unwrap_or(i32::MAX);
     let id = get_book_id(&args.url)?;
 
     let mut scraper = scraper::Scraper::new().await?;
     let page = scraper.create_page().await?;
     let links = get_chapter_links(&mut scraper, page.clone(), &args.url, &id).await?;
 
-    println!("found {} links", links.len());
-    get_chapters(&mut scraper, links.clone()).await?;
+    let chapter_map: IndexMap<usize, String> = links
+        .clone()
+        .into_iter()
+        .enumerate()
+        .map(|(i, val)| (i + 1, val))
+        .filter(|(idx, _)| *idx >= start as usize && *idx <= end as usize)
+        .collect();
 
-    sleep(Duration::from_millis(30000)).await;
+    println!("found {} chapters", chapter_map.len());
+
+    let chapters = get_chapters(&mut scraper, chapter_map.clone()).await?;
+
     scraper.close().await?;
 
-    std::fs::write(args.out, links.join("\n"))?;
+    remove_path(&args.out)?;
+    if args.dir {
+        save_dir(chapters.clone(), &args.out)?;
+    } else {
+        save_singlefile(chapters.clone(), &args.out)?;
+    }
 
+    println!("Extraction complete");
     return Ok(());
 }

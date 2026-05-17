@@ -25,6 +25,7 @@ impl Scraper {
                 "--disable-infobars",
                 "--window-size=1920,1080",
             ])
+            .user_data_dir("./chrome-profile")
             .build()
             .map_err(|e| anyhow!(e))?;
 
@@ -56,8 +57,218 @@ impl Scraper {
 
         page.evaluate(
             r#"
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
-        "#,
+(() => {
+    //
+    // webdriver
+    //
+    Object.defineProperty(navigator, 'webdriver', {
+        get: () => undefined,
+    });
+
+    //
+    // languages
+    //
+    Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+    });
+
+    //
+    // plugins
+    //
+    Object.defineProperty(navigator, 'plugins', {
+        get: () => [
+            {
+                name: 'Chrome PDF Plugin',
+                filename: 'internal-pdf-viewer',
+                description: 'Portable Document Format'
+            },
+            {
+                name: 'Chrome PDF Viewer',
+                filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                description: ''
+            },
+            {
+                name: 'Native Client',
+                filename: 'internal-nacl-plugin',
+                description: ''
+            }
+        ],
+    });
+
+    //
+    // chrome runtime
+    //
+    window.chrome = {
+        runtime: {},
+        app: {},
+        csi: () => {},
+        loadTimes: () => {},
+    };
+
+    //
+    // permissions API
+    //
+    const originalQuery = window.navigator.permissions.query;
+
+    window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications'
+            ? Promise.resolve({ state: Notification.permission })
+            : originalQuery(parameters)
+    );
+
+    //
+    // platform
+    //
+    Object.defineProperty(navigator, 'platform', {
+        get: () => 'Win32',
+    });
+
+    //
+    // hardwareConcurrency
+    //
+    Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => 8,
+    });
+
+    //
+    // deviceMemory
+    //
+    Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => 8,
+    });
+
+    //
+    // maxTouchPoints
+    //
+    Object.defineProperty(navigator, 'maxTouchPoints', {
+        get: () => 0,
+    });
+
+    //
+    // vendor
+    //
+    Object.defineProperty(navigator, 'vendor', {
+        get: () => 'Google Inc.',
+    });
+
+    //
+    // userAgentData
+    //
+    Object.defineProperty(navigator, 'userAgentData', {
+        get: () => ({
+            brands: [
+                { brand: 'Chromium', version: '136' },
+                { brand: 'Google Chrome', version: '136' }
+            ],
+            mobile: false,
+            platform: 'Windows'
+        }),
+    });
+
+    //
+    // WebGL spoofing
+    //
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+
+    WebGLRenderingContext.prototype.getParameter = function(parameter) {
+        //
+        // UNMASKED_VENDOR_WEBGL
+        //
+        if (parameter === 37445) {
+            return 'Intel Inc.';
+        }
+
+        //
+        // UNMASKED_RENDERER_WEBGL
+        //
+        if (parameter === 37446) {
+            return 'Intel Iris OpenGL Engine';
+        }
+
+        return getParameter.call(this, parameter);
+    };
+
+    //
+    // outer dimensions
+    //
+    if (!window.outerWidth || !window.outerHeight) {
+        window.outerWidth = window.innerWidth;
+        window.outerHeight = window.innerHeight;
+    }
+
+    //
+    // hairline fix
+    //
+    Object.defineProperty(screen, 'availTop', {
+        get: () => 0,
+    });
+
+    //
+    // fake mimeTypes
+    //
+    Object.defineProperty(navigator, 'mimeTypes', {
+        get: () => [
+            {
+                type: 'application/pdf',
+                suffixes: 'pdf',
+                description: 'Portable Document Format'
+            }
+        ],
+    });
+
+    //
+    // remove automation traces
+    //
+    delete window.__webdriver_script_fn;
+    delete window.__driver_evaluate;
+    delete window.__webdriver_evaluate;
+    delete window.__selenium_evaluate;
+    delete window.__fxdriver_evaluate;
+    delete window.__driver_unwrapped;
+    delete window.__webdriver_unwrapped;
+    delete window.__selenium_unwrapped;
+    delete window.__fxdriver_unwrapped;
+    delete window._Selenium_IDE_Recorder;
+    delete window._selenium;
+    delete window.callSelenium;
+    delete window.calledSelenium;
+    delete window.domAutomation;
+    delete window.domAutomationController;
+
+    //
+    // patch iframe detection
+    //
+    Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+        get: function() {
+            return window;
+        }
+    });
+
+    //
+    // fake media devices
+    //
+    if (navigator.mediaDevices) {
+        navigator.mediaDevices.enumerateDevices = async () => {
+            return [
+                {
+                    deviceId: 'default',
+                    kind: 'audioinput',
+                    label: 'Default Audio Device',
+                    groupId: 'default'
+                },
+                {
+                    deviceId: 'default',
+                    kind: 'videoinput',
+                    label: 'Default Video Device',
+                    groupId: 'default'
+                }
+            ];
+        };
+    }
+
+    console.log('Stealth patches applied');
+})();
+"#,
         )
         .await
         .context("Failed to apply stealth option")?;
@@ -74,8 +285,6 @@ impl Scraper {
         // wait for cloudflare
         for _ in 0..30 {
             let title = page.get_title().await?.unwrap();
-
-            println!("Page title: {}", title);
 
             if !title.contains("Just a moment") {
                 break;
