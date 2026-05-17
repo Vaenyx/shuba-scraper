@@ -47,7 +47,7 @@ impl Scraper {
         return Ok(());
     }
 
-    pub async fn get_page(&mut self, url: &str) -> Result<Page> {
+    pub async fn create_page(&mut self) -> Result<Page> {
         let page = self
             .browser
             .new_page("about:blank")
@@ -61,12 +61,30 @@ impl Scraper {
         )
         .await
         .context("Failed to apply stealth option")?;
-
+        return Ok(page);
+    }
+    pub async fn get_content(&mut self, page: Page, url: &str) -> Result<Page> {
         page.goto(url)
             .await
             .with_context(|| format!("Failed to navigate to {}", url))?;
 
-        return Ok(page);
+        // wait until body exists
+        page.find_element("body").await?;
+
+        // wait for cloudflare
+        for _ in 0..30 {
+            let title = page.get_title().await?.unwrap();
+
+            println!("Page title: {}", title);
+
+            if !title.contains("Just a moment") {
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+
+        Ok(page)
     }
 
     pub async fn get_links(page: &Page, filter: &str) -> Result<Vec<String>> {
@@ -90,7 +108,7 @@ impl Scraper {
             .into_value()
             .unwrap_or_default();
 
-        Ok(links)
+        return Ok(links);
     }
 }
 
