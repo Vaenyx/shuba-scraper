@@ -113,6 +113,10 @@ async fn get_chapters(
 fn remove_path(path_str: &str) -> Result<()> {
     let path = Path::new(path_str);
 
+    if !path.exists() {
+        return Ok(());
+    }
+
     let metadata = fs::symlink_metadata(path)?;
 
     if metadata.is_dir() {
