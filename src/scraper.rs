@@ -12,6 +12,10 @@ pub struct Scraper {
 
 impl Scraper {
     pub async fn new() -> Result<Self> {
+        let home = std::env::var("HOME")?;
+
+        let user_data_dir = format!("{}/.config/google-chrome/shuba-scraper", home);
+
         let config = BrowserConfig::builder()
             .no_sandbox()
             .args(vec![
@@ -25,8 +29,7 @@ impl Scraper {
                 "--disable-infobars",
                 "--window-size=1920,1080",
             ])
-            .with_head()
-            .user_data_dir("./chrome-profile")
+            .user_data_dir(user_data_dir)
             .build()
             .map_err(|e| anyhow!(e))?;
 
