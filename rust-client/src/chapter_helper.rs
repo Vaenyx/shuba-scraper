@@ -177,7 +177,7 @@ pub async fn extract_chapters(
     let mut chapters = IndexMap::new();
 
     for (idx, link) in links {
-        if *idx != 1 && (*idx - 1) % 50 == 0 {
+        if *idx % 50 == 0 {
             let cooldown = rand::random_range(100000..=250000);
 
             println!(
