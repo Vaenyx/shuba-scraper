@@ -136,7 +136,15 @@ async fn extract_chapter(client: &http_client::HTTPClient, url: &str, idx: u32) 
                 })
                 .unwrap_or_default();
 
-            let cleaned_content = content.lines().skip(4).collect::<Vec<_>>().join("\n");
+            let lines: Vec<_> = content.lines().collect();
+
+            let cleaned_content = lines
+                .iter()
+                .skip(4)
+                .take(lines.len().saturating_sub(6))
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
 
             return Ok(format!("{title}\n\n{cleaned_content}"));
         }
