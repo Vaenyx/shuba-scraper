@@ -1,7 +1,19 @@
 use anyhow::Result;
 use reqwest::{Client, Method};
+use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;
+
+#[derive(Deserialize)]
+pub struct FetchResponse {
+    pub success: bool,
+
+    #[allow(dead_code)]
+    pub title: Option<String>,
+
+    pub html: Option<String>,
+    pub error: Option<String>,
+}
 
 #[derive(Debug)]
 pub struct HTTPClient {

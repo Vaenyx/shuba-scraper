@@ -17,7 +17,7 @@ async function startBrowser() {
     await chromium.launchPersistentContext(
       "../chrome-profile",
       {
-        headless: false,
+        headless: true,
 
         viewport: {
           width: 1920,
@@ -137,7 +137,6 @@ app.post("/fetch", async (req, res) => {
     const title = await page.title();
 
     await humanize(page);
-
     res.json({
       success: true,
       title,
@@ -168,4 +167,10 @@ app.post("/fetch", async (req, res) => {
   });
 })();
 
+process.stdout.on("error", err => {
+  if (err.code === "EPIPE") {
+    return;
+  }
 
+  throw err;
+});
