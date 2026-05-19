@@ -46,7 +46,12 @@ pub async fn get_chapter_links(
         .html
         .ok_or_else(|| anyhow::anyhow!("Missing html field -> Internal Browser error"))?;
 
-    let document = Html::parse_document(&html);
+    let truncated_html = html
+        .split(r#"<div class="contentadv">"#)
+        .next()
+        .unwrap_or(&html);
+
+    let document = Html::parse_document(truncated_html);
 
     let selector = Selector::parse("a").map_err(|e| anyhow::anyhow!("{e}"))?;
 
