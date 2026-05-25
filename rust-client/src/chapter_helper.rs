@@ -6,7 +6,7 @@ use scraper::{Html, Selector};
 use std::sync::LazyLock;
 use tokio::time::{Duration, sleep};
 
-use crate::http_client;
+use crate::http_client::{self, TxtNavMode};
 
 static BOOK_ID_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^https?://(?:www\.)?69shuba\.com/book/(\d+)/?$").unwrap());
@@ -31,7 +31,7 @@ pub async fn get_chapter_links(
     start: u32,
     end: u32,
 ) -> Result<IndexMap<u32, String>> {
-    let response = client.fetch(url).await?;
+    let response = client.fetch(url, TxtNavMode::Exclude).await?;
 
     let parsed: http_client::FetchResponse = serde_json::from_str(&response)?;
 
@@ -92,7 +92,7 @@ async fn extract_chapter(client: &http_client::HTTPClient, url: &str, idx: u32) 
         println!("Extracting chapter {}", idx);
 
         let result: Result<String> = async {
-            let response = client.fetch(url).await?;
+            let response = client.fetch(url, TxtNavMode::Include).await?;
 
             let parsed: http_client::FetchResponse = serde_json::from_str(&response)?;
 
@@ -112,34 +112,15 @@ async fn extract_chapter(client: &http_client::HTTPClient, url: &str, idx: u32) 
             let title_selector =
                 Selector::parse(".txtnav h1").map_err(|e| anyhow::anyhow!("{e}"))?;
 
-            let content_selector =
-                Selector::parse(".txtnav").map_err(|e| anyhow::anyhow!("{e}"))?;
-
             let title = document
                 .select(&title_selector)
                 .next()
                 .map(|el| el.text().collect::<String>())
                 .unwrap_or_default();
 
-            let content = document
-                .select(&content_selector)
-                .next()
-                .map(|el| {
-                    el.text()
-                        .map(str::trim)
-                        .filter(|text| {
-                            !text.is_empty()
-                                && !text.contains("loadAdv")
-                                && !text.contains("window.")
-                                && !text.contains("_taboola")
-                                && !text.contains("tb_loader_script")
-                                && !text.contains("performance.mark")
-                                && !text.contains("flush: true")
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                })
-                .unwrap_or_default();
+            let content = parsed
+                .txtnav_text
+                .ok_or_else(|| anyhow::anyhow!("Missing txtnav_text field"))?;
 
             let lines: Vec<_> = content.lines().collect();
 
@@ -182,18 +163,6 @@ pub async fn extract_chapters(
     let mut chapters = IndexMap::new();
 
     for (idx, link) in links {
-        if *idx % 50 == 0 {
-            let cooldown = rand::random_range(100000..=250000);
-
-            println!(
-                "Cooling down for {} seconds (chapter {})",
-                cooldown / 1000,
-                idx
-            );
-
-            sleep(Duration::from_millis(cooldown)).await;
-        }
-
         let chapter = extract_chapter(client, link, *idx).await?;
 
         chapters.insert(*idx, chapter);

@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use serde_json::json;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct FetchResponse {
     pub success: bool,
 
@@ -12,6 +12,7 @@ pub struct FetchResponse {
     pub title: Option<String>,
 
     pub html: Option<String>,
+    pub txtnav_text: Option<String>,
     pub error: Option<String>,
 }
 
@@ -19,6 +20,11 @@ pub struct FetchResponse {
 pub struct HTTPClient {
     url: String,
     client: Client,
+}
+
+pub enum TxtNavMode {
+    Include,
+    Exclude,
 }
 
 impl HTTPClient {
@@ -53,12 +59,18 @@ impl HTTPClient {
         return Ok(text);
     }
 
-    pub async fn fetch(&self, url: &str) -> Result<String> {
+    pub async fn fetch(&self, url: &str, txtnav_mode: TxtNavMode) -> Result<String> {
+        let include_txtnav = match txtnav_mode {
+            TxtNavMode::Include => true,
+            TxtNavMode::Exclude => false,
+        };
+
         self.call(
             Method::POST,
             "/fetch",
             Some(json!({
-                "url": url
+                "url": url,
+                "txtnav": include_txtnav
             })),
         )
         .await
