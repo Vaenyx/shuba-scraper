@@ -11,6 +11,7 @@
   "license": "ISC",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "cheerio": "^1.2.0",
     "express": "^5.2.1",
     "playwright": "^1.60.0",
     "playwright-extra": "^4.3.6",

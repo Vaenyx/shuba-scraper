@@ -1,4 +1,5 @@
 const express = require("express");
+const cheerio = require("cheerio");
 
 const { chromium } = require("playwright-extra");
 
@@ -41,6 +42,49 @@ async function startBrowser() {
     );
 
   console.log("Browser started");
+}
+
+function extractFirstTxtnav(html) {
+  const $ = cheerio.load(html);
+
+  const el = $(".txtnav").first();
+
+  if (!el.length) {
+    return null;
+  }
+
+  let result = "";
+
+  for (const node of el[0].children) {
+    // skip ads
+    if (
+      node.type === "tag" &&
+      (
+        node.attribs?.class?.includes("bottom-ad") ||
+        node.attribs?.class?.includes("contentadv")
+      )
+    ) {
+      continue;
+    }
+
+    if (node.type === "text") {
+      result += node.data;
+    }
+
+    if (node.name === "br") {
+      result += "\n";
+    }
+
+    // include text from normal tags
+    if (
+      node.type === "tag" &&
+      node.name !== "script"
+    ) {
+      result += $(node).text();
+    }
+  }
+
+  return result.trim();
 }
 
 function randomInt(min, max) {
@@ -100,7 +144,7 @@ async function waitForCloudflare(page) {
 }
 
 app.post("/fetch", async (req, res) => {
-  const { url } = req.body;
+  const { url, txtnav } = req.body;
 
   if (!url) {
     return res.status(400).json({
@@ -116,7 +160,6 @@ app.post("/fetch", async (req, res) => {
 
     await humanize(page);
 
-
     console.log(`Navigating to ${url}`);
 
     await page.goto(url, {
@@ -126,32 +169,36 @@ app.post("/fetch", async (req, res) => {
 
     await waitForCloudflare(page);
 
-    await page.waitForLoadState(
-      "networkidle"
-    );
+    await page.waitForLoadState("networkidle");
 
     await sleep(3000);
 
     const html = await page.content();
-
     const title = await page.title();
 
+    let txtnav_text = null;
+
+    if (txtnav) {
+      txtnav_text = extractFirstTxtnav(html);
+    }
+
     await humanize(page);
-    res.json({
+
+    return res.json({
       success: true,
       title,
       html,
+      ...(txtnav && { txtnav_text }),
     });
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       title: null,
       error: err.message,
     });
   } finally {
     if (page) {
-      await page.close()
-        .catch(() => { });
+      await page.close().catch(() => { });
     }
   }
 });
