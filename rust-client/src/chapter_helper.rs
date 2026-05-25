@@ -47,7 +47,7 @@ pub async fn get_chapter_links(
         .ok_or_else(|| anyhow::anyhow!("Missing html field -> Internal Browser error"))?;
 
     let truncated_html = html
-        .split(r#"<div class="contentadv">"#)
+        .split(r#"<div class="bottom-ad">"#)
         .next()
         .unwrap_or(&html);
 
